@@ -1,6 +1,4 @@
-use anyhow::Result;
 use serde::Deserialize;
-use std::process::Command;
 
 #[derive(Debug, Clone, Default)]
 pub struct HarvestedClaudeSession {
@@ -25,7 +23,7 @@ struct KeychainCredentialsWrapper {
     claude_ai_oauth: Option<ClaudeOauthPayload>,
 }
 
-pub fn harvest_claude_session() -> Option<HarvestedClaudeSession> {
+pub async fn harvest_claude_session() -> Option<HarvestedClaudeSession> {
     if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
         if !key.trim().is_empty() {
             return Some(HarvestedClaudeSession {
@@ -38,7 +36,7 @@ pub fn harvest_claude_session() -> Option<HarvestedClaudeSession> {
 
     #[cfg(target_os = "macos")]
     {
-        if let Some(session) = harvest_from_macos_keychain() {
+        if let Some(session) = harvest_from_macos_keychain().await {
             return Some(session);
         }
     }
@@ -47,7 +45,7 @@ pub fn harvest_claude_session() -> Option<HarvestedClaudeSession> {
 }
 
 #[cfg(target_os = "macos")]
-fn harvest_from_macos_keychain() -> Option<HarvestedClaudeSession> {
+async fn harvest_from_macos_keychain() -> Option<HarvestedClaudeSession> {
     // Attempt reading from known service names used by the Claude Code CLI
     let possible_services = [
         "Claude Code-credentials-516b0843",
@@ -56,9 +54,10 @@ fn harvest_from_macos_keychain() -> Option<HarvestedClaudeSession> {
     ];
 
     for service_name in possible_services {
-        if let Ok(output) = Command::new("security")
+        if let Ok(output) = util::command::new_command("security")
             .args(["find-generic-password", "-s", service_name, "-w"])
             .output()
+            .await
         {
             if output.status.success() {
                 let raw_secret = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -84,9 +83,8 @@ fn harvest_from_macos_keychain() -> Option<HarvestedClaudeSession> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_harvest_claude_session_runs_safely() {
-        // Function must safely return Some or None without panicking
-        let _session = harvest_claude_session();
+    #[gpui::test]
+    async fn test_harvest_claude_session_runs_safely() {
+        let _session = harvest_claude_session().await;
     }
 }

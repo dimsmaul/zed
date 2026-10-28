@@ -267,6 +267,175 @@ impl Model {
             &self.id
         }
     }
+
+    /// Built-in fallback models used until dynamic model listing from Claude completes.
+    pub fn default_models() -> Vec<Self> {
+        vec![
+            Self {
+                id: "claude-opus-5-5".to_string(),
+                display_name: "Claude Opus 5.5".to_string(),
+                max_input_tokens: 1_000_000,
+                max_output_tokens: 128_000,
+                default_temperature: 1.0,
+                mode: AnthropicModelMode::AdaptiveThinking,
+                supports_thinking: true,
+                supports_adaptive_thinking: true,
+                supports_images: true,
+                supports_speed: true,
+                supports_compaction: true,
+                supported_effort_levels: vec![
+                    Effort::Low,
+                    Effort::Medium,
+                    Effort::High,
+                    Effort::XHigh,
+                    Effort::Max,
+                ],
+                tool_override: None,
+                extra_beta_headers: vec![
+                    FAST_MODE_BETA_HEADER.to_string(),
+                    COMPACTION_BETA_HEADER.to_string(),
+                    THINKING_BINDING_CONTROLS_BETA_HEADER.to_string(),
+                ],
+            },
+            Self {
+                id: "claude-sonnet-5-5".to_string(),
+                display_name: "Claude Sonnet 5.5".to_string(),
+                max_input_tokens: 1_000_000,
+                max_output_tokens: 64_000,
+                default_temperature: 1.0,
+                mode: AnthropicModelMode::AdaptiveThinking,
+                supports_thinking: true,
+                supports_adaptive_thinking: true,
+                supports_images: true,
+                supports_speed: false,
+                supports_compaction: true,
+                supported_effort_levels: vec![
+                    Effort::Low,
+                    Effort::Medium,
+                    Effort::High,
+                    Effort::XHigh,
+                    Effort::Max,
+                ],
+                tool_override: None,
+                extra_beta_headers: vec![
+                    COMPACTION_BETA_HEADER.to_string(),
+                    THINKING_BINDING_CONTROLS_BETA_HEADER.to_string(),
+                ],
+            },
+            Self {
+                id: "claude-haiku-5-5".to_string(),
+                display_name: "Claude Haiku 5.5".to_string(),
+                max_input_tokens: 200_000,
+                max_output_tokens: 8_192,
+                default_temperature: 1.0,
+                mode: AnthropicModelMode::AdaptiveThinking,
+                supports_thinking: true,
+                supports_adaptive_thinking: true,
+                supports_images: true,
+                supports_speed: false,
+                supports_compaction: true,
+                supported_effort_levels: vec![Effort::Low, Effort::Medium, Effort::High],
+                tool_override: None,
+                extra_beta_headers: vec![
+                    COMPACTION_BETA_HEADER.to_string(),
+                    THINKING_BINDING_CONTROLS_BETA_HEADER.to_string(),
+                ],
+            },
+            Self {
+                id: "claude-3-7-sonnet".to_string(),
+                display_name: "Claude 3.7 Sonnet".to_string(),
+                max_input_tokens: 200_000,
+                max_output_tokens: 64_000,
+                default_temperature: 1.0,
+                mode: AnthropicModelMode::Thinking {
+                    budget_tokens: Some(4_096),
+                },
+                supports_thinking: true,
+                supports_adaptive_thinking: true,
+                supports_images: true,
+                supports_speed: false,
+                supports_compaction: false,
+                supported_effort_levels: vec![Effort::Low, Effort::Medium, Effort::High],
+                tool_override: None,
+                extra_beta_headers: Vec::new(),
+            },
+            Self {
+                id: "claude-3-5-sonnet".to_string(),
+                display_name: "Claude 3.5 Sonnet".to_string(),
+                max_input_tokens: 200_000,
+                max_output_tokens: 8_192,
+                default_temperature: 1.0,
+                mode: AnthropicModelMode::Default,
+                supports_thinking: false,
+                supports_adaptive_thinking: false,
+                supports_images: true,
+                supports_speed: false,
+                supports_compaction: false,
+                supported_effort_levels: Vec::new(),
+                tool_override: None,
+                extra_beta_headers: Vec::new(),
+            },
+            Self {
+                id: "claude-3-5-haiku".to_string(),
+                display_name: "Claude 3.5 Haiku".to_string(),
+                max_input_tokens: 200_000,
+                max_output_tokens: 8_192,
+                default_temperature: 1.0,
+                mode: AnthropicModelMode::Default,
+                supports_thinking: false,
+                supports_adaptive_thinking: false,
+                supports_images: true,
+                supports_speed: false,
+                supports_compaction: false,
+                supported_effort_levels: Vec::new(),
+                tool_override: None,
+                extra_beta_headers: Vec::new(),
+            },
+        ]
+    }
+}
+
+/// Harvests Claude credentials from environment or Claude configuration files.
+pub fn harvest_claude_token() -> Option<String> {
+    if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(key) = std::env::var("CLAUDE_CODE_OAUTH_TOKEN") {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(key) = std::env::var("ANTHROPIC_AUTH_TOKEN") {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        for filename in [".claude.json", ".claude/.claude.json"] {
+            let path = std::path::Path::new(&home).join(filename);
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(token) = val
+                        .get("claudeAiOauth")
+                        .and_then(|oauth| oauth.get("accessToken"))
+                        .and_then(|token| token.as_str())
+                    {
+                        if !token.trim().is_empty() {
+                            return Some(token.trim().to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Generate completion with streaming.
@@ -362,12 +531,24 @@ pub async fn list_models(
 ) -> Result<Vec<Model>, AnthropicError> {
     let uri = format!("{api_url}/v1/models?limit=1000");
 
-    let request = HttpRequest::builder()
+    let trimmed = api_key.trim();
+    let is_oauth = trimmed.starts_with("sk-ant-oat") || trimmed.starts_with("Bearer ");
+    let mut request_builder = HttpRequest::builder()
         .method(Method::GET)
         .uri(uri)
         .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim())
-        .header("Accept", "application/json")
+        .header("Accept", "application/json");
+
+    if is_oauth {
+        let token = trimmed.strip_prefix("Bearer ").unwrap_or(trimmed).trim();
+        request_builder = request_builder
+            .header("Authorization", format!("Bearer {token}"))
+            .header("anthropic-beta", "oauth-2025-04-20,claude-code-20250219");
+    } else {
+        request_builder = request_builder.header("X-Api-Key", trimmed);
+    }
+
+    let request = request_builder
         .extra_headers(extra_headers)
         .body(AsyncBody::default())
         .map_err(AnthropicError::BuildRequestBody)?;
@@ -505,15 +686,30 @@ async fn send_request_to_route(
 ) -> Result<(http::Response<AsyncBody>, RateLimitInfo), AnthropicError> {
     let uri = format!("{api_url}{route}");
 
+    let trimmed = api_key.trim();
+    let is_oauth = trimmed.starts_with("sk-ant-oat") || trimmed.starts_with("Bearer ");
+
     let mut request_builder = HttpRequest::builder()
         .method(Method::POST)
         .uri(uri)
         .header("Anthropic-Version", "2023-06-01")
-        .header("X-Api-Key", api_key.trim())
         .header("Content-Type", "application/json");
 
-    if let Some(beta_headers) = beta_headers {
-        request_builder = request_builder.header("Anthropic-Beta", beta_headers);
+    if is_oauth {
+        let token = trimmed.strip_prefix("Bearer ").unwrap_or(trimmed).trim();
+        request_builder = request_builder.header("Authorization", format!("Bearer {token}"));
+        let oauth_beta = "oauth-2025-04-20,claude-code-20250219";
+        let combined_beta = if let Some(beta_headers) = beta_headers {
+            format!("{oauth_beta},{beta_headers}")
+        } else {
+            oauth_beta.to_string()
+        };
+        request_builder = request_builder.header("Anthropic-Beta", combined_beta);
+    } else {
+        request_builder = request_builder.header("X-Api-Key", trimmed);
+        if let Some(beta_headers) = beta_headers {
+            request_builder = request_builder.header("Anthropic-Beta", beta_headers);
+        }
     }
 
     let serialized_request =

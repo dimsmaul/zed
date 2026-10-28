@@ -60,13 +60,13 @@ pub struct State {
 
 impl State {
     fn is_authenticated(&self) -> bool {
-        self.api_key_state.has_key()
+        self.api_key_state.has_key() || anthropic::harvest_claude_token().is_some()
     }
 
     fn set_api_key(&mut self, api_key: Option<String>, cx: &mut Context<Self>) -> Task<Result<()>> {
         let credentials_provider = self.credentials_provider.clone();
         let api_url = AnthropicLanguageModelProvider::api_url(cx);
-        let should_fetch_models = api_key.is_some();
+        let should_fetch_models = api_key.is_some() || anthropic::harvest_claude_token().is_some();
         let task = self.api_key_state.store(
             api_url,
             api_key,
@@ -97,10 +97,12 @@ impl State {
 
         cx.spawn(async move |this, cx| {
             let result = task.await;
-            if result.is_ok() {
-                this.update(cx, |this, cx| this.restart_fetch_models_task(cx))
-                    .ok();
-            }
+            this.update(cx, |this, cx| {
+                if this.is_authenticated() {
+                    this.restart_fetch_models_task(cx);
+                }
+            })
+            .ok();
             result
         })
     }
@@ -108,9 +110,15 @@ impl State {
     fn fetch_models(&mut self, cx: &mut Context<Self>) -> Task<Result<()>> {
         let http_client = self.http_client.clone();
         let api_url = AnthropicLanguageModelProvider::api_url(cx);
-        let Some(api_key) = self.api_key_state.key(&api_url) else {
+        let api_key = self
+            .api_key_state
+            .key(&api_url)
+            .map(|key| key.to_string())
+            .or_else(anthropic::harvest_claude_token);
+
+        let Some(api_key) = api_key else {
             return Task::ready(Err(anyhow::anyhow!(
-                "cannot fetch Anthropic models without an API key"
+                "cannot fetch Anthropic models without an API key or Claude subscription"
             )));
         };
         let extra_headers = AnthropicLanguageModelProvider::settings(cx)
@@ -177,14 +185,18 @@ impl AnthropicLanguageModelProvider {
                 }
             })
             .detach();
-            State {
+            let mut state = State {
                 api_key_state: ApiKeyState::new(Self::api_url(cx), (*API_KEY_ENV_VAR).clone()),
                 credentials_provider,
                 http_client: http_client.clone(),
                 fetched_models: Vec::new(),
                 fetch_models_task: None,
                 last_fetch_models_error: None,
+            };
+            if state.is_authenticated() {
+                state.restart_fetch_models_task(cx);
             }
+            state
         });
 
         Self {
@@ -194,14 +206,18 @@ impl AnthropicLanguageModelProvider {
         }
     }
 
-    /// Every model this provider offers, keyed by id: the fetched list, with
-    /// settings entries added or overriding fetched ones.
+    /// Every model this provider offers, keyed by id: built-in fallbacks first,
+    /// followed by live models fetched from Claude /v1/models, with settings overrides.
     fn anthropic_models(&self, cx: &App) -> BTreeMap<String, anthropic::Model> {
         let mut models: BTreeMap<String, anthropic::Model> = BTreeMap::default();
 
-        // Models reported by Anthropic's `/v1/models` endpoint are the
-        // primary source. The list will be empty until authentication has
-        // succeeded and the first fetch completes.
+        // Built-in defaults guarantee immediate availability before first network fetch completes
+        for model in anthropic::Model::default_models() {
+            models.insert(model.id.to_string(), model);
+        }
+
+        // Live models reported by Anthropic's `/v1/models` endpoint dynamically discover and
+        // expose any newly released Claude models without requiring code changes or Zed releases!
         for model in &self.state.read(cx).fetched_models {
             models.insert(model.id.to_string(), model.clone());
         }
@@ -252,7 +268,12 @@ impl AnthropicLanguageModelProvider {
             let extra_headers = AnthropicLanguageModelProvider::settings(cx)
                 .custom_headers
                 .clone();
-            (state.api_key_state.key(&api_url), api_url, extra_headers)
+            let key = state
+                .api_key_state
+                .key(&api_url)
+                .map(|key| key.to_string())
+                .or_else(anthropic::harvest_claude_token);
+            (key, api_url, extra_headers)
         });
 
         let beta_headers = config.beta_headers();
