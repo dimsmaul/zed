@@ -699,6 +699,7 @@ const ZED_DISCUSSION_CONTENT: &str = include_str!("builtin/zed-discussion/SKILL.
 const ZED_DOCS_CONTENT: &str = include_str!("builtin/zed-docs/SKILL.md");
 const ZED_TDD_CONTENT: &str = include_str!("builtin/zed-tdd/SKILL.md");
 const ZED_SDD_CONTENT: &str = include_str!("builtin/zed-sdd/SKILL.md");
+const ZED_USAGE_CONTENT: &str = include_str!("builtin/zed-usage/SKILL.md");
 
 /// Returns the set of skills that are compiled into the Zed binary.
 pub fn builtin_skills() -> Vec<Skill> {
@@ -711,6 +712,7 @@ pub fn builtin_skills() -> Vec<Skill> {
         ("zed:docs", ZED_DOCS_CONTENT),
         ("zed:tdd", ZED_TDD_CONTENT),
         ("zed:sdd", ZED_SDD_CONTENT),
+        ("zed:usage", ZED_USAGE_CONTENT),
     ];
 
     for (name, content) in builtins {
@@ -753,6 +755,7 @@ const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[
     ("zed:docs", ZED_DOCS_CONTENT),
     ("zed:tdd", ZED_TDD_CONTENT),
     ("zed:sdd", ZED_SDD_CONTENT),
+    ("zed:usage", ZED_USAGE_CONTENT),
 ];
 
 /// Look up the full embedded content of a built-in skill by its

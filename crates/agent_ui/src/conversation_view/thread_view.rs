@@ -14,8 +14,8 @@ use acp_thread::{
     SubmissionId, SubmissionResponse, SubmissionState, ToolCallLocation, decode_path_escapes,
 };
 use agent::{
-    SandboxStatusKey, SandboxStatusRefresh, SkillLoadingIssue, SkillLoadingIssueKind,
-    SkillLoadingIssuesUpdated, ThreadSandbox, VerifiedSandboxStatus,
+    read_claude_subscription_usage, SandboxStatusKey, SandboxStatusRefresh, SkillLoadingIssue,
+    SkillLoadingIssueKind, SkillLoadingIssuesUpdated, ThreadSandbox, VerifiedSandboxStatus,
 };
 use agent_settings::UserAgentsMd;
 use agent_skills::MAX_SKILL_DESCRIPTION_LEN;
@@ -6913,6 +6913,37 @@ impl Render for TokenUsageTooltip {
                                     .size(LabelSize::Small),
                             )
                             .child(Label::new(cost_label)),
+                    )
+                })
+                .when_some(read_claude_subscription_usage(), |this, claude| {
+                    this.child(
+                        v_flex()
+                            .mt_1p5()
+                            .pt_1p5()
+                            .gap_0p5()
+                            .border_t_1()
+                            .border_color(cx.theme().colors().border_variant)
+                            .child(
+                                Label::new("Subscription Quota")
+                                    .color(Color::Muted)
+                                    .size(LabelSize::Small),
+                            )
+                            .when_some(claude.five_hour_window, |this, five_hour| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("5-Hour Session:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(format!("{}% used", five_hour.utilization_percent))),
+                                )
+                            })
+                            .when_some(claude.seven_day_window, |this, seven_day| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("7-Day Quota:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(format!("{}% used", seven_day.utilization_percent))),
+                                )
+                            }),
                     )
                 })
                 .when(

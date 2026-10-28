@@ -1,6 +1,7 @@
 mod db;
 pub mod guardrails;
 pub mod subscription_harvester;
+pub mod subscription_usage;
 mod legacy_thread;
 mod native_agent_server;
 pub mod outline;
@@ -18,6 +19,7 @@ use context_server::ContextServerId;
 pub use db::*;
 pub use guardrails::*;
 pub use subscription_harvester::*;
+pub use subscription_usage::*;
 use itertools::Itertools;
 pub use native_agent_server::NativeAgentServer;
 use parking_lot::Mutex;
@@ -195,8 +197,10 @@ pub const ZED_DISCUSSION_COMMAND_NAME: &str = "zed:discussion";
 pub const ZED_DOCS_COMMAND_NAME: &str = "zed:docs";
 pub const ZED_TDD_COMMAND_NAME: &str = "zed:tdd";
 pub const ZED_SDD_COMMAND_NAME: &str = "zed:sdd";
+pub const ZED_USAGE_COMMAND_NAME: &str = "zed:usage";
 pub const ONBOARD_COMMAND_NAME: &str = "onboard";
 pub const GUARDRAILS_COMMAND_NAME: &str = "guardrails";
+pub const USAGE_COMMAND_NAME: &str = "usage";
 
 /// Returns the set of MCP prompt names that must be server-qualified
 /// (`/<server>.<name>`) to stay unambiguous in the slash-command popup: names
@@ -1778,6 +1782,14 @@ impl NativeAgent {
             acp_thread::CommandCategory::Native,
         ));
 
+        let usage_command = acp_v2::AvailableCommand::new(
+            ZED_USAGE_COMMAND_NAME,
+            "Display subscription quota utilization and token usage metrics across Claude and Codex",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
         let registry = state.context_server_registry.read(cx);
 
         // Reserve built-in command names so colliding MCP prompts are prefixed
@@ -1790,8 +1802,10 @@ impl NativeAgent {
                 ZED_DOCS_COMMAND_NAME,
                 ZED_TDD_COMMAND_NAME,
                 ZED_SDD_COMMAND_NAME,
+                ZED_USAGE_COMMAND_NAME,
                 ONBOARD_COMMAND_NAME,
                 GUARDRAILS_COMMAND_NAME,
+                USAGE_COMMAND_NAME,
             ],
             registry.prompts().map(|p| p.prompt.name.as_str()),
         );
@@ -1839,6 +1853,7 @@ impl NativeAgent {
             docs_command,
             tdd_command,
             sdd_command,
+            usage_command,
         ]
         .into_iter()
         .chain(mcp_commands)
