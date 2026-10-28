@@ -29,7 +29,7 @@ pub mod welcome;
 pub mod workspace_error;
 mod workspace_settings;
 
-pub use dock::Panel;
+pub use dock::{Panel, PanelEvent};
 pub use multi_workspace::{
     CloseWorkspaceSidebar, DraggedSidebar, FocusWorkspaceSidebar, MoveProjectDown,
     MoveProjectToNewWindow, MoveProjectUp, MultiWorkspace, MultiWorkspaceEvent, NewThread,
