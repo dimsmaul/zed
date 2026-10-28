@@ -60,6 +60,15 @@ fn all_models(cx: &App) -> GroupedModels {
     let lm_registry = LanguageModelRegistry::global(cx).read(cx);
     let providers = lm_registry.visible_providers();
 
+    let has_direct = providers
+        .iter()
+        .any(|p| p.id().0 != "zed.dev" && p.is_authenticated(cx));
+
+    let providers = providers
+        .into_iter()
+        .filter(|p| !has_direct || p.id().0 != "zed.dev")
+        .collect::<Vec<_>>();
+
     let mut favorites_index = FavoritesIndex::default();
 
     for sel in &AgentSettings::get_global(cx).favorite_models {
@@ -431,6 +440,15 @@ impl PickerDelegate for LanguageModelPickerDelegate {
             .visible_providers()
             .into_iter()
             .filter(|provider| provider.is_authenticated(cx))
+            .collect::<Vec<_>>();
+
+        let has_direct = configured_providers
+            .iter()
+            .any(|p| p.id().0 != "zed.dev");
+
+        let configured_providers = configured_providers
+            .into_iter()
+            .filter(|p| !has_direct || p.id().0 != "zed.dev")
             .collect::<Vec<_>>();
 
         let configured_provider_ids = configured_providers

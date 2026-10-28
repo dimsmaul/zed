@@ -2057,9 +2057,21 @@ impl Thread {
         default_model: Option<&LanguageModel>,
         cx: &mut Context<Self>,
     ) {
+        let registry = LanguageModelRegistry::global(cx);
         let resolved = match &self.model {
-            ThreadModel::Ready(_) => return,
-            ThreadModel::Unresolved(selection) => LanguageModelRegistry::global(cx)
+            ThreadModel::Ready(model) => {
+                if model.provider_id().0 == "zed.dev" {
+                    let remapped = registry.read(cx).remap_model_if_needed(model.clone(), cx);
+                    if remapped.provider_id().0 != "zed.dev" {
+                        Some(remapped)
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+            ThreadModel::Unresolved(selection) => registry
                 .update(cx, |registry, cx| registry.select_model(selection, cx)),
             ThreadModel::Unset => default_model.cloned(),
         };
@@ -3024,10 +3036,20 @@ impl Thread {
             // or changes profile) take effect between tool-call rounds.
             // If a refusal fallback is active, use that model instead.
             let (model, provider, request) = this.update(cx, |this, cx| {
-                let model = refusal_fallback_model
+                let mut model = refusal_fallback_model
                     .clone()
                     .or_else(|| this.model().cloned())
                     .ok_or_else(|| anyhow!(NoModelConfiguredError))?;
+
+                if model.provider_id().0 == "zed.dev" {
+                    let remapped = LanguageModelRegistry::read_global(cx)
+                        .remap_model_if_needed(model.clone(), cx);
+                    if remapped.provider_id().0 != "zed.dev" {
+                        model = remapped.clone();
+                        this.set_model(remapped, cx);
+                    }
+                }
+
                 let provider = LanguageModelRegistry::read_global(cx).provider_for_model(&model);
                 this.refresh_turn_tools(cx);
                 let request = this.build_completion_request(intent, cx)?;
@@ -3400,8 +3422,12 @@ impl Thread {
             acp_thread::ContextCompactionStatus::InProgress,
         );
         let result: Result<ControlFlow<()>> = async {
-            let provider =
-                cx.update(|cx| LanguageModelRegistry::read_global(cx).provider_for_model(&model))?;
+            let (provider, model) = cx.update(|cx| {
+                let registry = LanguageModelRegistry::read_global(cx);
+                let model = registry.remap_model_if_needed(model, cx);
+                let provider = registry.provider_for_model(&model)?;
+                anyhow::Ok((provider, model))
+            })?;
             let stream = futures::select_biased! {
                 _ = cancellation_rx.changed().fuse() => {
                     if *cancellation_rx.borrow() {
@@ -4138,8 +4164,13 @@ impl Thread {
         let task = cx
             .spawn(async move |this, cx| {
                 let mut summary = String::new();
-                let provider = cx
-                    .update(|cx| LanguageModelRegistry::read_global(cx).provider_for_model(&model))
+                let (provider, model) = cx
+                    .update(|cx| {
+                        let registry = LanguageModelRegistry::read_global(cx);
+                        let model = registry.remap_model_if_needed(model, cx);
+                        let provider = registry.provider_for_model(&model)?;
+                        anyhow::Ok((provider, model))
+                    })
                     .log_err()?;
                 let mut messages = provider
                     .stream_completion(&model, request, cx)
@@ -5245,8 +5276,12 @@ pub async fn stream_thread_title(
     cx: &AsyncApp,
 ) -> Result<String> {
     let mut title = String::new();
-    let provider =
-        cx.update(|cx| LanguageModelRegistry::read_global(cx).provider_for_model(&model))?;
+    let (provider, model) = cx.update(|cx| {
+        let registry = LanguageModelRegistry::read_global(cx);
+        let model = registry.remap_model_if_needed(model, cx);
+        let provider = registry.provider_for_model(&model)?;
+        anyhow::Ok((provider, model))
+    })?;
     let mut events = provider.stream_completion(&model, request, cx).await?;
     while let Some(event) = events.next().await {
         let LanguageModelCompletionEvent::Text(text) = event? else {

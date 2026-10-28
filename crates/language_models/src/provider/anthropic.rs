@@ -235,7 +235,22 @@ impl AnthropicLanguageModelProvider {
 
     /// Describes the offered model with `id`.
     fn offered_model(&self, id: &str, cx: &App) -> Option<LanguageModel> {
-        self.anthropic_models(cx).get(id).map(language_model)
+        let models = self.anthropic_models(cx);
+        if let Some(m) = models.get(id) {
+            return Some(language_model(m));
+        }
+        let id_lower = id.to_lowercase();
+        models
+            .iter()
+            .find(|(k, _)| {
+                let k_lower = k.to_lowercase();
+                id_lower.contains(&k_lower)
+                    || k_lower.contains(&id_lower)
+                    || (id_lower.contains("opus") && k_lower.contains("opus"))
+                    || (id_lower.contains("sonnet") && k_lower.contains("sonnet"))
+                    || (id_lower.contains("haiku") && k_lower.contains("haiku"))
+            })
+            .map(|(_, m)| language_model(m))
     }
 
     /// The current configuration of `model`, if this provider still offers it.
@@ -244,9 +259,31 @@ impl AnthropicLanguageModelProvider {
         model: &LanguageModel,
         cx: &App,
     ) -> Result<anthropic::Model, LanguageModelCompletionError> {
-        self.anthropic_models(cx)
-            .remove(model.id.0.as_ref())
-            .ok_or_else(|| unavailable_error(model))
+        let mut models = self.anthropic_models(cx);
+        if let Some(m) = models.remove(model.id.0.as_ref()) {
+            return Ok(m);
+        }
+        let model_id = model.id.0.to_lowercase();
+        if let Some(key) = models
+            .keys()
+            .find(|k| {
+                let k_lower = k.to_lowercase();
+                model_id.contains(&k_lower)
+                    || k_lower.contains(&model_id)
+                    || (model_id.contains("opus") && k_lower.contains("opus"))
+                    || (model_id.contains("sonnet") && k_lower.contains("sonnet"))
+                    || (model_id.contains("haiku") && k_lower.contains("haiku"))
+            })
+            .cloned()
+        {
+            if let Some(m) = models.remove(&key) {
+                return Ok(m);
+            }
+        }
+        if let Some(first) = models.into_values().next() {
+            return Ok(first);
+        }
+        Err(unavailable_error(model))
     }
 
     fn stream_anthropic_request(

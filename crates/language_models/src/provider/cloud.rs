@@ -15,8 +15,8 @@ use language_model::{
     AuthenticateError, CompactionResult, FastModeConfirmation, IconOrSvg, InlineDescription,
     LanguageModel, LanguageModelClient, LanguageModelCompletionError,
     LanguageModelCompletionStream, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    ProviderSettingsView, ZED_CLOUD_PROVIDER_ID, ZED_CLOUD_PROVIDER_NAME,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRegistry,
+    LanguageModelRequest, ProviderSettingsView, ZED_CLOUD_PROVIDER_ID, ZED_CLOUD_PROVIDER_NAME,
 };
 use language_models_cloud::{CloudLlmTokenProvider, CloudModelProvider, language_model};
 use rand::{Rng as _, SeedableRng as _, rngs::StdRng};
@@ -431,6 +431,29 @@ impl LanguageModelClient for CloudLanguageModelProvider {
         cx: &AsyncApp,
     ) -> BoxFuture<'static, Result<LanguageModelCompletionStream, LanguageModelCompletionError>>
     {
+        let fallback = cx.update(|cx| {
+            let registry = LanguageModelRegistry::read_global(cx);
+            let anthropic_id = LanguageModelProviderId("anthropic".into());
+            if let Some(anthropic) = registry.provider(&anthropic_id) {
+                if anthropic.is_authenticated(cx) {
+                    let remapped = registry.remap_model_if_needed(model.clone(), cx);
+                    return Some((anthropic, remapped));
+                }
+            }
+            let copilot_id = LanguageModelProviderId("copilot_chat".into());
+            if let Some(copilot) = registry.provider(&copilot_id) {
+                if copilot.is_authenticated(cx) {
+                    let remapped = registry.remap_model_if_needed(model.clone(), cx);
+                    return Some((copilot, remapped));
+                }
+            }
+            None
+        });
+
+        if let Some((provider, remapped_model)) = fallback {
+            return provider.stream_completion(&remapped_model, request, cx);
+        }
+
         cx.update(|cx| {
             self.state
                 .read(cx)
@@ -446,6 +469,29 @@ impl LanguageModelClient for CloudLanguageModelProvider {
         request: LanguageModelRequest,
         cx: &AsyncApp,
     ) -> BoxFuture<'static, Result<Option<u64>, LanguageModelCompletionError>> {
+        let fallback = cx.update(|cx| {
+            let registry = LanguageModelRegistry::read_global(cx);
+            let anthropic_id = LanguageModelProviderId("anthropic".into());
+            if let Some(anthropic) = registry.provider(&anthropic_id) {
+                if anthropic.is_authenticated(cx) {
+                    let remapped = registry.remap_model_if_needed(model.clone(), cx);
+                    return Some((anthropic, remapped));
+                }
+            }
+            let copilot_id = LanguageModelProviderId("copilot_chat".into());
+            if let Some(copilot) = registry.provider(&copilot_id) {
+                if copilot.is_authenticated(cx) {
+                    let remapped = registry.remap_model_if_needed(model.clone(), cx);
+                    return Some((copilot, remapped));
+                }
+            }
+            None
+        });
+
+        if let Some((provider, remapped_model)) = fallback {
+            return provider.count_input_tokens(&remapped_model, request, cx);
+        }
+
         cx.update(|cx| {
             self.state
                 .read(cx)

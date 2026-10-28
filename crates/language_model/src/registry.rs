@@ -290,9 +290,20 @@ impl LanguageModelRegistry {
     }
 
     pub fn available_models<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = LanguageModel> + 'a {
+        let has_direct = self
+            .providers
+            .iter()
+            .any(|(id, p)| id.0 != "zed.dev" && p.is_authenticated(cx));
+
         self.providers
             .values()
-            .filter(|provider| provider.is_authenticated(cx))
+            .filter(move |provider| {
+                if has_direct && provider.id().0 == "zed.dev" {
+                    false
+                } else {
+                    provider.is_authenticated(cx)
+                }
+            })
             .flat_map(|provider| provider.provided_models(cx))
     }
 
@@ -310,8 +321,63 @@ impl LanguageModelRegistry {
         &self,
         model: &LanguageModel,
     ) -> Result<Arc<dyn LanguageModelProvider>, LanguageModelCompletionError> {
+        if model.provider_id.0 == "zed.dev" {
+            let anthropic_id = LanguageModelProviderId("anthropic".into());
+            if let Some(anthropic) = self.provider(&anthropic_id) {
+                return Ok(anthropic);
+            }
+            let copilot_id = LanguageModelProviderId("copilot_chat".into());
+            if let Some(copilot) = self.provider(&copilot_id) {
+                return Ok(copilot);
+            }
+        }
         self.provider(&model.provider_id)
             .ok_or_else(|| unavailable_error(model))
+    }
+
+    pub fn remap_model_if_needed(&self, model: LanguageModel, cx: &App) -> LanguageModel {
+        if model.provider_id.0 != "zed.dev" {
+            return model;
+        }
+
+        let anthropic_id = LanguageModelProviderId("anthropic".into());
+        if let Some(anthropic) = self.provider(&anthropic_id) {
+            if anthropic.is_authenticated(cx) {
+                let models = anthropic.provided_models(cx);
+                let model_id_lower = model.id.0.to_lowercase();
+                if let Some(found) = models.iter().find(|m| m.id.0 == model.id.0) {
+                    return found.clone();
+                }
+                if let Some(found) = models.iter().find(|m| {
+                    let k = m.id.0.to_lowercase();
+                    model_id_lower.contains(&k)
+                        || k.contains(&model_id_lower)
+                        || (model_id_lower.contains("opus") && k.contains("opus"))
+                        || (model_id_lower.contains("sonnet") && k.contains("sonnet"))
+                        || (model_id_lower.contains("haiku") && k.contains("haiku"))
+                }) {
+                    return found.clone();
+                }
+                if let Some(default) = anthropic.default_model(cx) {
+                    return default;
+                }
+            }
+        }
+
+        let copilot_id = LanguageModelProviderId("copilot_chat".into());
+        if let Some(copilot) = self.provider(&copilot_id) {
+            if copilot.is_authenticated(cx) {
+                let models = copilot.provided_models(cx);
+                if let Some(found) = models.iter().find(|m| m.id.0 == model.id.0) {
+                    return found.clone();
+                }
+                if let Some(default) = copilot.default_model(cx) {
+                    return default;
+                }
+            }
+        }
+
+        model
     }
 
     pub fn select_default_model(&mut self, model: Option<&SelectedModel>, cx: &mut Context<Self>) {
@@ -378,8 +444,19 @@ impl LanguageModelRegistry {
             if let Some(anthropic) = self.provider(&anthropic_id) {
                 if anthropic.is_authenticated(cx) {
                     let models = anthropic.provided_models(cx);
-                    if let Some(found) = models.into_iter().find(|m| m.id == selected_model.model) {
-                        return Some(found);
+                    let selected_lower = selected_model.model.0.to_lowercase();
+                    if let Some(found) = models.iter().find(|m| m.id == selected_model.model) {
+                        return Some(found.clone());
+                    }
+                    if let Some(found) = models.iter().find(|m| {
+                        let k = m.id.0.to_lowercase();
+                        selected_lower.contains(&k)
+                            || k.contains(&selected_lower)
+                            || (selected_lower.contains("opus") && k.contains("opus"))
+                            || (selected_lower.contains("sonnet") && k.contains("sonnet"))
+                            || (selected_lower.contains("haiku") && k.contains("haiku"))
+                    }) {
+                        return Some(found.clone());
                     }
                     if let Some(default) = anthropic.default_model(cx) {
                         return Some(default);
