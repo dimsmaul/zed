@@ -1,0 +1,37 @@
+# Zed Harness Agent Guardrail Configuration
+# Place this file as .zed/guardrails.yaml or .guardrails.yaml in your repository root
+
+version: "1.0"
+workspace_id: "github.com/dimsmaul/zed"
+
+# Deny paths: Any tool call (write_file, edit_file, delete_path, etc.) matching these patterns will be blocked immediately.
+deny_paths:
+  - "common-grpc/**"
+  - "proto/generated/**"
+  - ".github/workflows/**"
+
+# Detailed path rules with actionable explanations sent directly back to the LLM
+path_rules:
+  - pattern: "common-grpc/**"
+    action: "block"
+    reason: "Direct edits to common-grpc are strictly forbidden. You must edit service proto schemas in services/ and trigger the proto release script."
+  - pattern: "proto/generated/**"
+    action: "block"
+    reason: "Generated proto files cannot be edited manually. Run 'buf generate' or proto compilation tasks instead."
+
+# Protected branches: Prevents autonomous commits or push tasks to release branches
+protected_branches:
+  - "main"
+  - "master"
+  - "release/**"
+
+# Allowed commands whitelist (optional): If defined, terminal tool calls will only allow commands matching these prefixes
+allowed_commands:
+  - "cargo test"
+  - "cargo check"
+  - "cargo clippy"
+  - "git status"
+  - "git diff"
+
+# Optional Cloud RAG & Guardrail service URL for centralized team policies
+rag_service_url: "http://localhost:8080"

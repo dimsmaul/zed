@@ -262,6 +262,10 @@ impl ToolPermissionDecision {
             return denial;
         }
 
+        if let Some(denial) = crate::guardrails::check_guardrail_permissions(tool_name, inputs) {
+            return denial;
+        }
+
         let rules = permissions.tools.get(tool_name);
 
         // Check for invalid regex patterns before evaluating rules.

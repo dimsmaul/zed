@@ -1,4 +1,6 @@
 mod db;
+pub mod guardrails;
+pub mod subscription_harvester;
 mod legacy_thread;
 mod native_agent_server;
 pub mod outline;
@@ -14,6 +16,8 @@ mod tools;
 
 use context_server::ContextServerId;
 pub use db::*;
+pub use guardrails::*;
+pub use subscription_harvester::*;
 use itertools::Itertools;
 pub use native_agent_server::NativeAgentServer;
 use parking_lot::Mutex;
@@ -185,6 +189,8 @@ impl From<&Skill> for NativeAvailableSkill {
 }
 
 pub const COMPACT_COMMAND_NAME: &str = "compact";
+pub const ONBOARD_COMMAND_NAME: &str = "onboard";
+pub const GUARDRAILS_COMMAND_NAME: &str = "guardrails";
 
 /// Returns the set of MCP prompt names that must be server-qualified
 /// (`/<server>.<name>`) to stay unambiguous in the slash-command popup: names
@@ -1718,13 +1724,29 @@ impl NativeAgent {
             acp_thread::CommandCategory::Native,
         ));
 
+        let onboard_command = acp_v2::AvailableCommand::new(
+            ONBOARD_COMMAND_NAME,
+            "Analyze codebase architecture and ingest reference patterns into RAG",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
+        let guardrails_command = acp_v2::AvailableCommand::new(
+            GUARDRAILS_COMMAND_NAME,
+            "Inspect and enforce project guardrail rules",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
         let registry = state.context_server_registry.read(cx);
 
         // Reserve the built-in command name so a same-named MCP prompt is
         // force-prefixed (`/<server>.compact`) and stays reachable: an
         // unqualified `/compact` always routes to the native command.
         let ambiguous_prompt_names = ambiguous_mcp_prompt_names(
-            [COMPACT_COMMAND_NAME],
+            [COMPACT_COMMAND_NAME, ONBOARD_COMMAND_NAME, GUARDRAILS_COMMAND_NAME],
             registry.prompts().map(|p| p.prompt.name.as_str()),
         );
 
@@ -1763,7 +1785,8 @@ impl NativeAgent {
             Some(command)
         });
 
-        std::iter::once(compact_command)
+        vec![compact_command, onboard_command, guardrails_command]
+            .into_iter()
             .chain(mcp_commands)
             .collect()
     }
