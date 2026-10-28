@@ -189,6 +189,12 @@ impl From<&Skill> for NativeAvailableSkill {
 }
 
 pub const COMPACT_COMMAND_NAME: &str = "compact";
+pub const ZED_ONBOARD_COMMAND_NAME: &str = "zed:onboard";
+pub const ZED_GUARDRAIL_COMMAND_NAME: &str = "zed:guardrail";
+pub const ZED_DISCUSSION_COMMAND_NAME: &str = "zed:discussion";
+pub const ZED_DOCS_COMMAND_NAME: &str = "zed:docs";
+pub const ZED_TDD_COMMAND_NAME: &str = "zed:tdd";
+pub const ZED_SDD_COMMAND_NAME: &str = "zed:sdd";
 pub const ONBOARD_COMMAND_NAME: &str = "onboard";
 pub const GUARDRAILS_COMMAND_NAME: &str = "guardrails";
 
@@ -1725,16 +1731,48 @@ impl NativeAgent {
         ));
 
         let onboard_command = acp_v2::AvailableCommand::new(
-            ONBOARD_COMMAND_NAME,
-            "Analyze codebase architecture and ingest reference patterns into RAG",
+            ZED_ONBOARD_COMMAND_NAME,
+            "Analyze codebase architecture and ingest reference patterns into Team RAG",
         )
         .meta(acp_thread::meta_with_command_category(
             acp_thread::CommandCategory::Native,
         ));
 
         let guardrails_command = acp_v2::AvailableCommand::new(
-            GUARDRAILS_COMMAND_NAME,
-            "Inspect and enforce project guardrail rules",
+            ZED_GUARDRAIL_COMMAND_NAME,
+            "Inspect and enforce project guardrail rules and protected paths",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
+        let discussion_command = acp_v2::AvailableCommand::new(
+            ZED_DISCUSSION_COMMAND_NAME,
+            "Architectural & design discussion mode (strictly read-only / no file writes)",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
+        let docs_command = acp_v2::AvailableCommand::new(
+            ZED_DOCS_COMMAND_NAME,
+            "Living documentation generator based on real code patterns",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
+        let tdd_command = acp_v2::AvailableCommand::new(
+            ZED_TDD_COMMAND_NAME,
+            "Test-Driven Development (TDD) workflow: failing tests first (Red), code (Green), verify",
+        )
+        .meta(acp_thread::meta_with_command_category(
+            acp_thread::CommandCategory::Native,
+        ));
+
+        let sdd_command = acp_v2::AvailableCommand::new(
+            ZED_SDD_COMMAND_NAME,
+            "Spec-Driven Development (SDD) workflow: spec.md, user confirmation, acceptance testing",
         )
         .meta(acp_thread::meta_with_command_category(
             acp_thread::CommandCategory::Native,
@@ -1742,11 +1780,19 @@ impl NativeAgent {
 
         let registry = state.context_server_registry.read(cx);
 
-        // Reserve the built-in command name so a same-named MCP prompt is
-        // force-prefixed (`/<server>.compact`) and stays reachable: an
-        // unqualified `/compact` always routes to the native command.
+        // Reserve built-in command names so colliding MCP prompts are prefixed
         let ambiguous_prompt_names = ambiguous_mcp_prompt_names(
-            [COMPACT_COMMAND_NAME, ONBOARD_COMMAND_NAME, GUARDRAILS_COMMAND_NAME],
+            [
+                COMPACT_COMMAND_NAME,
+                ZED_ONBOARD_COMMAND_NAME,
+                ZED_GUARDRAIL_COMMAND_NAME,
+                ZED_DISCUSSION_COMMAND_NAME,
+                ZED_DOCS_COMMAND_NAME,
+                ZED_TDD_COMMAND_NAME,
+                ZED_SDD_COMMAND_NAME,
+                ONBOARD_COMMAND_NAME,
+                GUARDRAILS_COMMAND_NAME,
+            ],
             registry.prompts().map(|p| p.prompt.name.as_str()),
         );
 
@@ -1785,10 +1831,18 @@ impl NativeAgent {
             Some(command)
         });
 
-        vec![compact_command, onboard_command, guardrails_command]
-            .into_iter()
-            .chain(mcp_commands)
-            .collect()
+        vec![
+            compact_command,
+            onboard_command,
+            guardrails_command,
+            discussion_command,
+            docs_command,
+            tdd_command,
+            sdd_command,
+        ]
+        .into_iter()
+        .chain(mcp_commands)
+        .collect()
     }
 
     pub fn load_thread(

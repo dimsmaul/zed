@@ -511,14 +511,14 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
             "Skill name must be at most {MAX_SKILL_NAME_LEN} characters"
         ));
     }
-    if name.starts_with('-') || name.ends_with('-') {
-        return Err("Skill name must not start or end with a hyphen");
+    if name.starts_with('-') || name.ends_with('-') || name.starts_with(':') || name.ends_with(':') {
+        return Err("Skill name must not start or end with a hyphen or colon");
     }
     if !name
         .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == ':')
     {
-        return Err("Skill name must contain only lowercase letters, numbers, and hyphens");
+        return Err("Skill name must contain only lowercase letters, numbers, hyphens, and colons");
     }
     Ok(())
 }
@@ -693,12 +693,30 @@ pub fn read_skill_body_from_content(
 
 /// Content of the built-in `create-skill` SKILL.md, embedded at compile time.
 const CREATE_SKILL_CONTENT: &str = include_str!("builtin/create-skill/SKILL.md");
+const ZED_ONBOARD_CONTENT: &str = include_str!("builtin/zed-onboard/SKILL.md");
+const ZED_GUARDRAIL_CONTENT: &str = include_str!("builtin/zed-guardrail/SKILL.md");
+const ZED_DISCUSSION_CONTENT: &str = include_str!("builtin/zed-discussion/SKILL.md");
+const ZED_DOCS_CONTENT: &str = include_str!("builtin/zed-docs/SKILL.md");
+const ZED_TDD_CONTENT: &str = include_str!("builtin/zed-tdd/SKILL.md");
+const ZED_SDD_CONTENT: &str = include_str!("builtin/zed-sdd/SKILL.md");
 
 /// Returns the set of skills that are compiled into the Zed binary.
 pub fn builtin_skills() -> Vec<Skill> {
     let mut skills = Vec::new();
-    if let Ok(skill) = parse_builtin_skill("create-skill", CREATE_SKILL_CONTENT) {
-        skills.push(skill);
+    let builtins = [
+        ("create-skill", CREATE_SKILL_CONTENT),
+        ("zed:onboard", ZED_ONBOARD_CONTENT),
+        ("zed:guardrail", ZED_GUARDRAIL_CONTENT),
+        ("zed:discussion", ZED_DISCUSSION_CONTENT),
+        ("zed:docs", ZED_DOCS_CONTENT),
+        ("zed:tdd", ZED_TDD_CONTENT),
+        ("zed:sdd", ZED_SDD_CONTENT),
+    ];
+
+    for (name, content) in builtins {
+        if let Ok(skill) = parse_builtin_skill(name, content) {
+            skills.push(skill);
+        }
     }
     skills
 }
@@ -727,7 +745,15 @@ fn parse_builtin_skill(name: &str, content: &'static str) -> Result<Skill> {
 
 /// All built-in skills as `(name, raw_content)` pairs. Used by
 /// `builtin_skill_content` to serve the full SKILL.md without disk I/O.
-const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[("create-skill", CREATE_SKILL_CONTENT)];
+const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[
+    ("create-skill", CREATE_SKILL_CONTENT),
+    ("zed:onboard", ZED_ONBOARD_CONTENT),
+    ("zed:guardrail", ZED_GUARDRAIL_CONTENT),
+    ("zed:discussion", ZED_DISCUSSION_CONTENT),
+    ("zed:docs", ZED_DOCS_CONTENT),
+    ("zed:tdd", ZED_TDD_CONTENT),
+    ("zed:sdd", ZED_SDD_CONTENT),
+];
 
 /// Look up the full embedded content of a built-in skill by its
 /// synthetic file path. Returns `None` if the path doesn't match any
@@ -2101,6 +2127,8 @@ description: A skill with no body content
     #[test]
     fn validate_name_accepts_valid_names() {
         assert!(validate_name("draft-pr").is_ok());
+        assert!(validate_name("zed:onboard").is_ok());
+        assert!(validate_name("zed:tdd").is_ok());
         assert!(validate_name("a").is_ok());
         assert!(validate_name("skill1").is_ok());
         assert!(validate_name(&"a".repeat(MAX_SKILL_NAME_LEN)).is_ok());
