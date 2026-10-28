@@ -578,6 +578,9 @@ pub async fn list_models(
         let token = trimmed.strip_prefix("Bearer ").unwrap_or(trimmed).trim();
         request_builder = request_builder
             .header("Authorization", format!("Bearer {token}"))
+            .header("User-Agent", "claude-cli/2.1.302 (external, sdk-cli)")
+            .header("x-app", "cli")
+            .header("anthropic-dangerous-direct-browser-access", "true")
             .header("anthropic-beta", "oauth-2025-04-20,claude-code-20250219");
     } else {
         request_builder = request_builder.header("X-Api-Key", trimmed);
@@ -730,9 +733,17 @@ async fn send_request_to_route(
         .header("Anthropic-Version", "2023-06-01")
         .header("Content-Type", "application/json");
 
+    let mut request_value =
+        serde_json::to_value(&request).map_err(AnthropicError::SerializeRequest)?;
+
     if is_oauth {
         let token = trimmed.strip_prefix("Bearer ").unwrap_or(trimmed).trim();
-        request_builder = request_builder.header("Authorization", format!("Bearer {token}"));
+        request_builder = request_builder
+            .header("Authorization", format!("Bearer {token}"))
+            .header("User-Agent", "claude-cli/2.1.302 (external, sdk-cli)")
+            .header("x-app", "cli")
+            .header("anthropic-dangerous-direct-browser-access", "true");
+
         let oauth_beta = "oauth-2025-04-20,claude-code-20250219";
         let combined_beta = if let Some(beta_headers) = beta_headers {
             format!("{oauth_beta},{beta_headers}")
@@ -740,6 +751,32 @@ async fn send_request_to_route(
             oauth_beta.to_string()
         };
         request_builder = request_builder.header("Anthropic-Beta", combined_beta);
+
+        const CC_BILLING: &str = "x-anthropic-billing-header: cc_version=2.1.302.804; cc_entrypoint=sdk-cli;\n\n";
+        if let Some(system) = request_value.get_mut("system") {
+            if let Some(s) = system.as_str() {
+                if !s.starts_with("x-anthropic-billing-header") {
+                    *system = serde_json::Value::String(format!("{CC_BILLING}{s}"));
+                }
+            } else if let Some(arr) = system.as_array_mut() {
+                let has_billing = arr.iter().any(|item| {
+                    item.get("text")
+                        .and_then(|t| t.as_str())
+                        .map_or(false, |t| t.starts_with("x-anthropic-billing-header"))
+                });
+                if !has_billing {
+                    arr.insert(
+                        0,
+                        serde_json::json!({
+                            "type": "text",
+                            "text": CC_BILLING.trim()
+                        }),
+                    );
+                }
+            }
+        } else {
+            request_value["system"] = serde_json::Value::String(CC_BILLING.trim().to_string());
+        }
     } else {
         request_builder = request_builder.header("X-Api-Key", trimmed);
         if let Some(beta_headers) = beta_headers {
@@ -748,7 +785,7 @@ async fn send_request_to_route(
     }
 
     let serialized_request =
-        serde_json::to_string(&request).map_err(AnthropicError::SerializeRequest)?;
+        serde_json::to_string(&request_value).map_err(AnthropicError::SerializeRequest)?;
     let request = request_builder
         .extra_headers(extra_headers)
         .body(AsyncBody::from(serialized_request))
