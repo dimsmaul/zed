@@ -396,6 +396,7 @@ impl Model {
 }
 
 /// Harvests Claude credentials from environment or Claude configuration files.
+#[allow(clippy::disallowed_methods)]
 pub fn harvest_claude_token() -> Option<String> {
     if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
         let trimmed = key.trim();
@@ -428,6 +429,40 @@ pub fn harvest_claude_token() -> Option<String> {
                     {
                         if !token.trim().is_empty() {
                             return Some(token.trim().to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let services = [
+            "Claude Code-credentials-516b0843",
+            "Claude Code-credentials",
+            "Claude Safe Storage",
+        ];
+        for service in services {
+            if let Ok(output) = std::process::Command::new("security")
+                .args(["find-generic-password", "-s", service, "-w"])
+                .output()
+            {
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if text.starts_with("sk-ant-") {
+                        return Some(text);
+                    }
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(token) = val
+                            .get("claudeAiOauth")
+                            .and_then(|oauth| oauth.get("accessToken"))
+                            .and_then(|t| t.as_str())
+                        {
+                            let trimmed = token.trim();
+                            if !trimmed.is_empty() {
+                                return Some(trimmed.to_string());
+                            }
                         }
                     }
                 }

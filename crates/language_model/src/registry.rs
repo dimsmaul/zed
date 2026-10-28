@@ -196,16 +196,15 @@ impl LanguageModelRegistry {
     pub fn providers(&self) -> Vec<Arc<dyn LanguageModelProvider>> {
         let zed_provider_id = LanguageModelProviderId("zed.dev".into());
         let mut providers = Vec::with_capacity(self.providers.len());
+        // Prioritize local direct subscriptions first (anthropic, copilot_chat, etc.)
+        for (id, provider) in &self.providers {
+            if id != &zed_provider_id {
+                providers.push(provider.clone());
+            }
+        }
         if let Some(provider) = self.providers.get(&zed_provider_id) {
             providers.push(provider.clone());
         }
-        providers.extend(self.providers.values().filter_map(|p| {
-            if p.id() != zed_provider_id {
-                Some(p.clone())
-            } else {
-                None
-            }
-        }));
         providers
     }
 
@@ -374,6 +373,34 @@ impl LanguageModelRegistry {
         selected_model: &SelectedModel,
         cx: &mut Context<Self>,
     ) -> Option<LanguageModel> {
+        if selected_model.provider == LanguageModelProviderId("zed.dev".into()) {
+            let anthropic_id = LanguageModelProviderId("anthropic".into());
+            if let Some(anthropic) = self.provider(&anthropic_id) {
+                if anthropic.is_authenticated(cx) {
+                    let models = anthropic.provided_models(cx);
+                    if let Some(found) = models.into_iter().find(|m| m.id == selected_model.model) {
+                        return Some(found);
+                    }
+                    if let Some(default) = anthropic.default_model(cx) {
+                        return Some(default);
+                    }
+                }
+            }
+
+            let copilot_id = LanguageModelProviderId("copilot_chat".into());
+            if let Some(copilot) = self.provider(&copilot_id) {
+                if copilot.is_authenticated(cx) {
+                    let models = copilot.provided_models(cx);
+                    if let Some(found) = models.into_iter().find(|m| m.id == selected_model.model) {
+                        return Some(found);
+                    }
+                    if let Some(default) = copilot.default_model(cx) {
+                        return Some(default);
+                    }
+                }
+            }
+        }
+
         self.provider(&selected_model.provider)?
             .provided_models(cx)
             .into_iter()

@@ -1,3 +1,4 @@
+mod agent_chat_item;
 mod agent_configuration;
 pub mod agent_connection_store;
 mod agent_diff;
@@ -75,6 +76,7 @@ use util::{
 use workspace::Workspace;
 
 use crate::agent_configuration::ManageProfilesModal;
+pub use crate::agent_chat_item::AgentChatItem;
 pub use crate::agent_connection_store::{ActiveAcpConnection, AgentConnectionStore};
 pub use crate::agent_panel::{
     AgentPanel, AgentPanelEvent, AgentPanelTerminalInfo, TerminalId, ThreadTitleRegenerationResult,

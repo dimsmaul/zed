@@ -814,14 +814,7 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
             workspace.finish_dock_restoration(cx);
 
             // Harness Agent requirement: AI Chat is the default main window (Kiro-style)!
-            if let Some(agent_panel) = workspace.panel::<agent_ui::AgentPanel>(cx) {
-                workspace.open_panel::<agent_ui::AgentPanel>(window, cx);
-                agent_panel.update(cx, |panel, cx| {
-                    if !panel.is_zoomed(window, cx) {
-                        cx.emit(workspace::PanelEvent::ZoomIn);
-                    }
-                });
-            }
+            agent_ui::AgentChatItem::open_in_workspace(workspace, window, cx);
         })?;
 
         anyhow::Ok(())
@@ -886,14 +879,7 @@ fn ensure_agent_panel_for_workspace(
             }
 
             if workspace.active_item(cx).is_none() && workspace.zoomed_item().is_none() {
-                if let Some(panel) = workspace.panel::<agent_ui::AgentPanel>(cx) {
-                    workspace.open_panel::<agent_ui::AgentPanel>(window, cx);
-                    panel.update(cx, |panel, cx| {
-                        if !panel.is_zoomed(window, cx) {
-                            cx.emit(workspace::PanelEvent::ZoomIn);
-                        }
-                    });
-                }
+                agent_ui::AgentChatItem::open_in_workspace(workspace, window, cx);
             }
         })
     })

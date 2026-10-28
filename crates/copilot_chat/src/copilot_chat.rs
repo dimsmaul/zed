@@ -553,10 +553,54 @@ pub fn init(
     cx.set_global(GlobalCopilotChat(copilot_chat));
 }
 
+#[allow(clippy::disallowed_methods)]
 fn oauth_token_from_env() -> Option<String> {
-    std::env::var(COPILOT_OAUTH_ENV_VAR)
-        .ok()
-        .or_else(|| std::env::var(GITHUB_COPILOT_OAUTH_ENV_VAR).ok())
+    if let Ok(token) = std::env::var(COPILOT_OAUTH_ENV_VAR) {
+        let trimmed = token.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(token) = std::env::var(GITHUB_COPILOT_OAUTH_ENV_VAR) {
+        let trimmed = token.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("gh").args(["auth", "token"]).output() {
+        if output.status.success() {
+            let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if token.starts_with("gho_") || token.starts_with("ghp_") || token.starts_with("ghu_") {
+                return Some(token);
+            }
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        for filename in [
+            ".config/github-copilot/apps.json",
+            ".config/github-copilot/hosts.json",
+        ] {
+            let path = std::path::Path::new(&home).join(filename);
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(obj) = val.as_object() {
+                        for (_, entry) in obj {
+                            if let Some(token) = entry.get("oauth_token").and_then(|t| t.as_str()) {
+                                let trimmed = token.trim();
+                                if !trimmed.is_empty() {
+                                    return Some(trimmed.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 async fn load_stored_token(
