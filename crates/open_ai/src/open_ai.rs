@@ -1220,6 +1220,7 @@ where
         .uri(format!("{api_url}/chat/completions"))
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", api_key.trim()))
+        .header("User-Agent", "codex-cli/0.1.0 (local)")
         .extra_headers(extra_headers)
         .body(AsyncBody::from(body))
         .map_err(|error| RequestError::BuildRequestBody {
@@ -1298,6 +1299,7 @@ pub fn embed<'a>(
         .uri(uri)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", api_key.trim()))
+        .header("User-Agent", "codex-cli/0.1.0 (local)")
         .body(body)
         .map(|request| client.send(request));
 

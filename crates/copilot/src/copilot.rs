@@ -515,6 +515,12 @@ impl Copilot {
             }
         }
 
+        if !env.contains_key(copilot_chat::COPILOT_OAUTH_ENV_VAR) {
+            if let Some(token) = copilot_chat::oauth_token_from_env() {
+                env.insert(copilot_chat::COPILOT_OAUTH_ENV_VAR.to_string(), token);
+            }
+        }
+
         if env.is_empty() { None } else { Some(env) }
     }
 

@@ -69,9 +69,42 @@ static API_KEY_ENV_VAR: LazyLock<EnvVar> = LazyLock::new(|| {
     EnvVar::new(GEMINI_API_KEY_VAR_NAME.into()).or(EnvVar::new(GOOGLE_AI_API_KEY_VAR_NAME.into()))
 });
 
+pub(crate) fn harvest_antigravity_token() -> Option<Arc<str>> {
+    let home = std::env::var("HOME").ok()?;
+    let oauth_path = std::path::Path::new(&home).join(".gemini").join("oauth_creds.json");
+    if let Ok(content) = std::fs::read_to_string(oauth_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(token) = val.get("access_token").and_then(|t| t.as_str()) {
+                let trimmed = token.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.into());
+                }
+            }
+        }
+    }
+    let jetski_path = std::path::Path::new(&home).join(".gemini").join("jetski-standalone-oauth-token");
+    if let Ok(content) = std::fs::read_to_string(jetski_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(token) = val.get("token").and_then(|t| {
+                if let Some(s) = t.as_str() {
+                    Some(s)
+                } else {
+                    t.get("access_token").and_then(|s| s.as_str())
+                }
+            }) {
+                let trimmed = token.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.into());
+                }
+            }
+        }
+    }
+    None
+}
+
 impl State {
     fn is_authenticated(&self) -> bool {
-        self.api_key_state.has_key()
+        self.api_key_state.has_key() || harvest_antigravity_token().is_some()
     }
 
     fn set_api_key(&mut self, api_key: Option<String>, cx: &mut Context<Self>) -> Task<Result<()>> {
@@ -124,7 +157,7 @@ impl State {
 
     fn restart_fetch_models_task(&mut self, cx: &mut Context<Self>) {
         let api_url = GoogleLanguageModelProvider::api_url(cx);
-        let Some(api_key) = self.api_key_state.key(&api_url) else {
+        let Some(api_key) = self.api_key_state.key(&api_url).or_else(harvest_antigravity_token) else {
             self.fetch_models_task = None;
             return;
         };
@@ -260,7 +293,7 @@ impl GoogleLanguageModelProvider {
             let extra_headers = GoogleLanguageModelProvider::settings(cx)
                 .custom_headers
                 .clone();
-            (state.api_key_state.key(&api_url), api_url, extra_headers)
+            (state.api_key_state.key(&api_url).or_else(harvest_antigravity_token), api_url, extra_headers)
         });
 
         async move {

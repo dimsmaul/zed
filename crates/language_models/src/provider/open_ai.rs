@@ -57,9 +57,33 @@ pub struct State {
     credentials_provider: Arc<dyn CredentialsProvider>,
 }
 
+pub(crate) fn harvest_codex_token() -> Option<Arc<str>> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::Path::new(&home).join(".codex").join("auth.json");
+    let content = std::fs::read_to_string(path).ok()?;
+    let val = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+    if let Some(key) = val.get("OPENAI_API_KEY").and_then(|k| k.as_str()) {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.into());
+        }
+    }
+    if let Some(token) = val
+        .get("tokens")
+        .and_then(|t| t.get("access_token"))
+        .and_then(|a| a.as_str())
+    {
+        let trimmed = token.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.into());
+        }
+    }
+    None
+}
+
 impl State {
     fn is_authenticated(&self) -> bool {
-        self.api_key_state.has_key()
+        self.api_key_state.has_key() || harvest_codex_token().is_some()
     }
 
     fn set_api_key(&mut self, api_key: Option<String>, cx: &mut Context<Self>) -> Task<Result<()>> {
@@ -181,7 +205,7 @@ impl OpenAiLanguageModelProvider {
             let extra_headers = OpenAiLanguageModelProvider::settings(cx)
                 .custom_headers
                 .clone();
-            (state.api_key_state.key(&api_url), api_url, extra_headers)
+            (state.api_key_state.key(&api_url).or_else(harvest_codex_token), api_url, extra_headers)
         });
 
         let future = request_limiter.stream(async move {
@@ -225,7 +249,7 @@ impl OpenAiLanguageModelProvider {
             let extra_headers = OpenAiLanguageModelProvider::settings(cx)
                 .custom_headers
                 .clone();
-            (state.api_key_state.key(&api_url), api_url, extra_headers)
+            (state.api_key_state.key(&api_url).or_else(harvest_codex_token), api_url, extra_headers)
         });
 
         let provider = PROVIDER_NAME;
@@ -261,7 +285,7 @@ impl OpenAiLanguageModelProvider {
             let extra_headers = OpenAiLanguageModelProvider::settings(cx)
                 .custom_headers
                 .clone();
-            (state.api_key_state.key(&api_url), api_url, extra_headers)
+            (state.api_key_state.key(&api_url).or_else(harvest_codex_token), api_url, extra_headers)
         });
 
         let provider = PROVIDER_NAME;
@@ -482,7 +506,7 @@ impl LanguageModelClient for OpenAiLanguageModelProvider {
             let extra_headers = OpenAiLanguageModelProvider::settings(cx)
                 .custom_headers
                 .clone();
-            (state.api_key_state.key(&api_url), api_url, extra_headers)
+            (state.api_key_state.key(&api_url).or_else(harvest_codex_token), api_url, extra_headers)
         });
         request_limiter
             .run(async move {

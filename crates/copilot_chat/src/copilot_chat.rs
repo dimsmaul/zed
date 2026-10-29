@@ -554,7 +554,7 @@ pub fn init(
 }
 
 #[allow(clippy::disallowed_methods)]
-fn oauth_token_from_env() -> Option<String> {
+pub fn oauth_token_from_env() -> Option<String> {
     if let Ok(token) = std::env::var(COPILOT_OAUTH_ENV_VAR) {
         let trimmed = token.trim();
         if !trimmed.is_empty() {

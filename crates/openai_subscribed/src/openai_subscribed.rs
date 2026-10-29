@@ -145,7 +145,13 @@ impl State {
                                     }
                                 }
                             }
-                            Ok(None) => {}
+                            Ok(None) => {
+                                if let Some(credentials) = load_credentials_from_codex_cli() {
+                                    state.auth_generation =
+                                        state.auth_generation.wrapping_add(1);
+                                    state.credentials = Some(credentials);
+                                }
+                            }
                             Err(error) => {
                                 log::error!(
                                     "Failed to load ChatGPT subscription credentials: {error:#}"
@@ -1316,6 +1322,41 @@ fn now_ms() -> u64 {
             log::error!("System clock is before UNIX epoch: {err}");
             0
         })
+}
+
+fn load_credentials_from_codex_cli() -> Option<CodexCredentials> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::Path::new(&home).join(".codex").join("auth.json");
+    let content = std::fs::read_to_string(path).ok()?;
+    let val = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+    let tokens = val.get("tokens")?.as_object()?;
+    let access_token = tokens.get("access_token")?.as_str()?.to_string();
+    if access_token.trim().is_empty() {
+        return None;
+    }
+    let refresh_token = tokens
+        .get("refresh_token")
+        .and_then(|r| r.as_str())
+        .unwrap_or("")
+        .to_string();
+    let jwt = tokens
+        .get("id_token")
+        .and_then(|id| id.as_str())
+        .unwrap_or(&access_token);
+    let claims = extract_jwt_claims(jwt);
+    let account_id = tokens
+        .get("account_id")
+        .and_then(|a| a.as_str())
+        .map(|s| s.to_string())
+        .or(claims.account_id);
+
+    Some(CodexCredentials {
+        access_token,
+        refresh_token,
+        expires_at_ms: now_ms() + 3600 * 1000,
+        account_id,
+        email: claims.email,
+    })
 }
 
 #[cfg(test)]

@@ -137,11 +137,22 @@ pub async fn list_models(
         if let Some(token) = &page_token {
             url.query_pairs_mut().append_pair("pageToken", token);
         }
-        let request = HttpRequest::builder()
+        let is_oauth = api_key.starts_with("ya29.") || api_key.starts_with("Bearer ");
+        let token = api_key.strip_prefix("Bearer ").unwrap_or(api_key).trim();
+        let mut request_builder = HttpRequest::builder()
             .method(Method::GET)
             .uri(url.as_str())
-            .header("x-goog-api-key", api_key.trim())
-            .header("Accept", "application/json")
+            .header("Accept", "application/json");
+
+        if is_oauth {
+            request_builder = request_builder
+                .header("Authorization", format!("Bearer {token}"))
+                .header("User-Agent", "antigravity-cli/2.0 (external, zed)");
+        } else {
+            request_builder = request_builder.header("x-goog-api-key", api_key.trim());
+        }
+
+        let request = request_builder
             .extra_headers(extra_headers)
             .body(AsyncBody::empty())
             .map_err(|error| LanguageModelCompletionError::BuildRequestBody {
@@ -208,13 +219,27 @@ pub async fn stream_generate_content(
     // The `model` field is emptied as it is provided as a path parameter.
     let model_id = mem::take(&mut request.model.model_id);
 
-    let uri =
-        format!("{api_url}/v1beta/models/{model_id}:streamGenerateContent?alt=sse&key={api_key}",);
+    let is_oauth = api_key.starts_with("ya29.") || api_key.starts_with("Bearer ");
+    let token = api_key.strip_prefix("Bearer ").unwrap_or(api_key).trim();
 
-    let request = HttpRequest::builder()
+    let uri = if is_oauth {
+        format!("{api_url}/v1beta/models/{model_id}:streamGenerateContent?alt=sse")
+    } else {
+        format!("{api_url}/v1beta/models/{model_id}:streamGenerateContent?alt=sse&key={api_key}")
+    };
+
+    let mut request_builder = HttpRequest::builder()
         .method(Method::POST)
         .uri(uri)
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/json");
+
+    if is_oauth {
+        request_builder = request_builder
+            .header("Authorization", format!("Bearer {token}"))
+            .header("User-Agent", "antigravity-cli/2.0 (external, zed)");
+    }
+
+    let request = request_builder
         .extra_headers(extra_headers)
         .body(AsyncBody::from(serde_json::to_string(&request).map_err(
             |error| LanguageModelCompletionError::SerializeRequest {
