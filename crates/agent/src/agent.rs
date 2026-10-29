@@ -44,7 +44,7 @@ use agent_client_protocol::schema::v2 as acp_v2;
 use agent_skills::{
     AGENTS_DIR_NAME, MAX_SKILL_DESCRIPTIONS_SIZE, MAX_SKILL_FILE_SIZE, ProjectSkillGroup,
     SKILL_FILE_NAME, Skill, SkillIndex, SkillLoadError, SkillLoadWarning, SkillScopeId,
-    SkillSource, SkillSummary, builtin_skills, global_skills_dir, load_skills_from_directory,
+    SkillSource, SkillSummary, builtin_skills, external_skills_dirs, global_skills_dir, load_skills_from_directory,
     parse_skill_frontmatter, project_skills_relative_path, read_skill_body_from_content,
 };
 use anyhow::{Context as _, Result, anyhow};
@@ -1247,17 +1247,28 @@ impl NativeAgent {
             })
             .collect::<Vec<_>>();
 
-        // Load global skills
+        // Load global skills (including Claude, Codex, and Antigravity ecosystem skills)
         let global_skills_task = {
             let global_skills_dir = global_skills_dir();
+            let external_dirs = external_skills_dirs();
             let global_skills_fs = fs.clone();
             cx.background_spawn(async move {
-                load_skills_from_directory(
+                let mut results = load_skills_from_directory(
                     &global_skills_fs,
                     &global_skills_dir,
                     SkillSource::Global,
                 )
-                .await
+                .await;
+                for dir in external_dirs {
+                    let external_results = load_skills_from_directory(
+                        &global_skills_fs,
+                        &dir,
+                        SkillSource::Global,
+                    )
+                    .await;
+                    results.extend(external_results);
+                }
+                results
             })
         };
 

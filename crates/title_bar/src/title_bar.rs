@@ -2,8 +2,13 @@ mod application_menu;
 pub mod collab;
 mod onboarding_banner;
 mod plan_chip;
-mod title_bar_settings;
+pub mod rag_graph_modal;
+pub mod title_bar_settings;
+pub mod token_usage_modal;
 mod update_version;
+
+use crate::rag_graph_modal::RagGraphModal;
+use crate::token_usage_modal::TokenUsageModal;
 
 use crate::application_menu::{ApplicationMenu, show_menus};
 use crate::plan_chip::PlanChip;
@@ -413,6 +418,8 @@ impl Render for TitleBar {
                             ),
                     )
                 })
+                .child(self.render_rag_graph_button(cx))
+                .child(self.render_token_usage_button(cx))
                 .when(TitleBarSettings::get_global(cx).show_user_menu, |this| {
                     this.child(self.render_user_menu_button(cx))
                 })
@@ -1227,6 +1234,26 @@ impl TitleBar {
                     })
                     .detach();
             })
+    }
+
+    pub fn render_rag_graph_button(&mut self, _cx: &mut Context<Self>) -> impl Element {
+        PopoverMenu::new("rag-graph-menu")
+            .trigger_with_tooltip(
+                IconButton::new("rag-graph-trigger", IconName::GitGraph),
+                Tooltip::text("RAG Knowledge Graph"),
+            )
+            .anchor(gpui::Anchor::TopRight)
+            .menu(move |_window, cx| Some(cx.new(|cx| RagGraphModal::new(cx))))
+    }
+
+    pub fn render_token_usage_button(&mut self, _cx: &mut Context<Self>) -> impl Element {
+        PopoverMenu::new("token-usage-menu")
+            .trigger_with_tooltip(
+                IconButton::new("token-usage-trigger", IconName::SignalHigh),
+                Tooltip::text("Token Usage & Subscriptions"),
+            )
+            .anchor(gpui::Anchor::TopRight)
+            .menu(move |_window, cx| Some(cx.new(|cx| TokenUsageModal::new(cx))))
     }
 
     pub fn render_user_menu_button(&mut self, cx: &mut Context<Self>) -> impl Element {

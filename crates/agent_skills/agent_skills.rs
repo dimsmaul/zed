@@ -782,6 +782,17 @@ pub fn global_skills_dir() -> PathBuf {
         .join(SKILLS_DIR_NAME)
 }
 
+/// Returns external ecosystem skill directories installed in Claude, Codex, and Antigravity.
+pub fn external_skills_dirs() -> Vec<PathBuf> {
+    let home = paths::home_dir();
+    vec![
+        home.join(".claude").join("skills"),
+        home.join(".codex").join("skills"),
+        home.join(".gemini").join("antigravity").join("builtin").join("skills"),
+        home.join(".gemini").join("antigravity").join("skills"),
+    ]
+}
+
 /// Project-local skills live at this path relative to a worktree root,
 /// e.g. `<worktree>/.agents/skills/<skill>/SKILL.md`.
 pub fn project_skills_relative_path() -> &'static str {

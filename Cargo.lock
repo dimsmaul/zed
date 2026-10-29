@@ -18347,6 +18347,7 @@ dependencies = [
  "schemars 1.0.4",
  "semver",
  "serde",
+ "serde_json",
  "settings",
  "smallvec",
  "telemetry",
