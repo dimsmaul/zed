@@ -51,7 +51,14 @@ fn uses_thinking_budget(model_id: &str) -> bool {
 
 /// Thinking-budget models whose thinking can be turned off with a zero budget.
 pub(crate) fn supports_disabling_thinking(model_id: &str) -> bool {
-    matches!(model_id, "gemini-2.5-flash" | "gemini-2.5-flash-lite")
+    matches!(
+        model_id,
+        "gemini-2.5-flash"
+            | "gemini-2.5-flash-lite"
+            | "gemini-3.8-flash"
+            | "gemini-3.8-flash-lite"
+            | "gemini-3.5-flash"
+    )
 }
 
 /// Models that take tool result media as sibling parts of the function response.
@@ -73,14 +80,15 @@ fn supports_minimal_thinking(model_id: &str) -> bool {
             | "gemini-3.5-flash"
             | "gemini-3.5-flash-lite"
             | "gemini-3.6-flash"
+            | "gemini-3.8-flash-lite"
     )
 }
 
 /// The thinking level Zed selects for a level-based model until the user picks another.
 fn default_thinking_level(model_id: &str) -> ThinkingLevel {
     match model_id {
-        "gemini-3.5-flash-lite" => ThinkingLevel::Minimal,
-        "gemini-3-flash-preview" | "gemini-3.1-pro-preview" => ThinkingLevel::High,
+        "gemini-3.5-flash-lite" | "gemini-3.8-flash-lite" => ThinkingLevel::Minimal,
+        "gemini-3-flash-preview" | "gemini-3.1-pro-preview" | "gemini-3.8-flash" => ThinkingLevel::High,
         _ => ThinkingLevel::Medium,
     }
 }

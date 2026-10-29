@@ -71,17 +71,6 @@ static API_KEY_ENV_VAR: LazyLock<EnvVar> = LazyLock::new(|| {
 
 pub(crate) fn harvest_antigravity_token() -> Option<Arc<str>> {
     let home = std::env::var("HOME").ok()?;
-    let oauth_path = std::path::Path::new(&home).join(".gemini").join("oauth_creds.json");
-    if let Ok(content) = std::fs::read_to_string(oauth_path) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(token) = val.get("access_token").and_then(|t| t.as_str()) {
-                let trimmed = token.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.into());
-                }
-            }
-        }
-    }
     let jetski_path = std::path::Path::new(&home).join(".gemini").join("jetski-standalone-oauth-token");
     if let Ok(content) = std::fs::read_to_string(jetski_path) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -99,6 +88,19 @@ pub(crate) fn harvest_antigravity_token() -> Option<Arc<str>> {
             }
         }
     }
+
+    let oauth_path = std::path::Path::new(&home).join(".gemini").join("oauth_creds.json");
+    if let Ok(content) = std::fs::read_to_string(oauth_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(token) = val.get("access_token").and_then(|t| t.as_str()) {
+                let trimmed = token.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.into());
+                }
+            }
+        }
+    }
+
     None
 }
 
@@ -252,13 +254,120 @@ impl GoogleLanguageModelProvider {
 
         if models.is_empty() && self.is_authenticated(cx) {
             let default_models = [
-                ("gemini-2.5-pro", "Gemini 2.5 Pro (Antigravity)", 2_000_000, 65_536),
-                ("gemini-2.5-flash", "Gemini 2.5 Flash (Antigravity)", 1_000_000, 65_536),
-                ("gemini-2.0-flash", "Gemini 2.0 Flash (Antigravity)", 1_000_000, 8_192),
-                ("gemini-1.5-pro", "Gemini 1.5 Pro", 2_000_000, 8_192),
-                ("gemini-1.5-flash", "Gemini 1.5 Flash", 1_000_000, 8_192),
+                (
+                    "gemini-3.8-flash",
+                    "Gemini 3.8 Flash (Latest)",
+                    1_048_576,
+                    65_536,
+                    google_ai::GoogleModelMode::Thinking { budget_tokens: None },
+                    vec![
+                        google_ai::ThinkingLevel::Low,
+                        google_ai::ThinkingLevel::Medium,
+                        google_ai::ThinkingLevel::High,
+                    ],
+                    Some(google_ai::ThinkingLevel::High),
+                ),
+                (
+                    "gemini-3.8-flash-lite",
+                    "Gemini 3.8 Flash Lite",
+                    1_048_576,
+                    65_536,
+                    google_ai::GoogleModelMode::Thinking { budget_tokens: None },
+                    vec![
+                        google_ai::ThinkingLevel::Minimal,
+                        google_ai::ThinkingLevel::Low,
+                        google_ai::ThinkingLevel::Medium,
+                        google_ai::ThinkingLevel::High,
+                    ],
+                    Some(google_ai::ThinkingLevel::Minimal),
+                ),
+                (
+                    "gemini-3.5-flash",
+                    "Gemini 3.5 Flash",
+                    1_048_576,
+                    65_536,
+                    google_ai::GoogleModelMode::Thinking { budget_tokens: None },
+                    vec![
+                        google_ai::ThinkingLevel::Minimal,
+                        google_ai::ThinkingLevel::Low,
+                        google_ai::ThinkingLevel::Medium,
+                        google_ai::ThinkingLevel::High,
+                    ],
+                    Some(google_ai::ThinkingLevel::Medium),
+                ),
+                (
+                    "gemini-3.1-pro-preview",
+                    "Gemini 3.1 Pro Preview",
+                    2_097_152,
+                    65_536,
+                    google_ai::GoogleModelMode::Thinking { budget_tokens: None },
+                    vec![
+                        google_ai::ThinkingLevel::Low,
+                        google_ai::ThinkingLevel::Medium,
+                        google_ai::ThinkingLevel::High,
+                    ],
+                    Some(google_ai::ThinkingLevel::High),
+                ),
+                (
+                    "gemini-3-flash-preview",
+                    "Gemini 3 Flash Preview",
+                    1_048_576,
+                    65_536,
+                    google_ai::GoogleModelMode::Thinking { budget_tokens: None },
+                    vec![
+                        google_ai::ThinkingLevel::Low,
+                        google_ai::ThinkingLevel::Medium,
+                        google_ai::ThinkingLevel::High,
+                    ],
+                    Some(google_ai::ThinkingLevel::High),
+                ),
+                (
+                    "gemini-2.5-pro",
+                    "Gemini 2.5 Pro",
+                    2_000_000,
+                    65_536,
+                    google_ai::GoogleModelMode::Default,
+                    Vec::new(),
+                    None,
+                ),
+                (
+                    "gemini-2.5-flash",
+                    "Gemini 2.5 Flash",
+                    1_000_000,
+                    65_536,
+                    google_ai::GoogleModelMode::Default,
+                    Vec::new(),
+                    None,
+                ),
+                (
+                    "gemini-2.0-flash",
+                    "Gemini 2.0 Flash",
+                    1_000_000,
+                    8_192,
+                    google_ai::GoogleModelMode::Default,
+                    Vec::new(),
+                    None,
+                ),
+                (
+                    "gemini-1.5-pro",
+                    "Gemini 1.5 Pro",
+                    2_000_000,
+                    8_192,
+                    google_ai::GoogleModelMode::Default,
+                    Vec::new(),
+                    None,
+                ),
+                (
+                    "gemini-1.5-flash",
+                    "Gemini 1.5 Flash",
+                    1_000_000,
+                    8_192,
+                    google_ai::GoogleModelMode::Default,
+                    Vec::new(),
+                    None,
+                ),
             ];
-            for (id, display_name, max_input, max_output) in default_models {
+            for (id, display_name, max_input, max_output, mode, levels, default_level) in default_models {
                 models.insert(
                     id.to_string(),
                     google_ai::Model {
@@ -266,9 +375,9 @@ impl GoogleLanguageModelProvider {
                         display_name: display_name.to_string(),
                         max_input_tokens: max_input,
                         max_output_tokens: Some(max_output),
-                        mode: google_ai::GoogleModelMode::Default,
-                        supported_thinking_levels: Vec::new(),
-                        default_thinking_level: None,
+                        mode,
+                        supported_thinking_levels: levels,
+                        default_thinking_level: default_level,
                     },
                 );
             }
@@ -277,9 +386,12 @@ impl GoogleLanguageModelProvider {
         models
     }
 
-    /// The newest offered Flash-Lite model, else the newest Flash model.
+    /// The newest offered Flash model, with gemini-3.8-flash prioritized.
     fn preferred_model(&self, cx: &App) -> Option<LanguageModel> {
         let models = self.google_models(cx);
+        if let Some(model) = models.get("gemini-3.8-flash").map(language_model) {
+            return Some(model);
+        }
         ["-flash-lite", "-flash"].iter().find_map(|family| {
             models
                 .values()
