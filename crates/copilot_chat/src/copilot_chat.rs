@@ -568,15 +568,6 @@ pub fn oauth_token_from_env() -> Option<String> {
         }
     }
 
-    if let Ok(output) = std::process::Command::new("gh").args(["auth", "token"]).output() {
-        if output.status.success() {
-            let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if token.starts_with("gho_") || token.starts_with("ghp_") || token.starts_with("ghu_") {
-                return Some(token);
-            }
-        }
-    }
-
     if let Ok(home) = std::env::var("HOME") {
         for filename in [
             ".config/github-copilot/apps.json",
@@ -596,6 +587,15 @@ pub fn oauth_token_from_env() -> Option<String> {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("gh").args(["auth", "token"]).output() {
+        if output.status.success() {
+            let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if token.starts_with("ghu_") || token.starts_with("gho_") || token.starts_with("ghp_") {
+                return Some(token);
             }
         }
     }

@@ -782,12 +782,14 @@ pub fn global_skills_dir() -> PathBuf {
         .join(SKILLS_DIR_NAME)
 }
 
-/// Returns external ecosystem skill directories installed in Claude, Codex, and Antigravity.
+/// Returns external ecosystem skill directories installed in Claude, Codex, Copilot, and Antigravity.
 pub fn external_skills_dirs() -> Vec<PathBuf> {
     let home = paths::home_dir();
     vec![
         home.join(".claude").join("skills"),
         home.join(".codex").join("skills"),
+        home.join(".config").join("github-copilot").join("skills"),
+        home.join(".copilot").join("skills"),
         home.join(".gemini").join("antigravity").join("builtin").join("skills"),
         home.join(".gemini").join("antigravity").join("skills"),
     ]

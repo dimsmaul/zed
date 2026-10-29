@@ -1795,7 +1795,7 @@ impl NativeAgent {
 
         let usage_command = acp_v2::AvailableCommand::new(
             ZED_USAGE_COMMAND_NAME,
-            "Display subscription quota utilization and token usage metrics across Claude and Codex",
+            "Display subscription quota utilization and token usage metrics across Claude, Codex, Copilot, and Antigravity",
         )
         .meta(acp_thread::meta_with_command_category(
             acp_thread::CommandCategory::Native,

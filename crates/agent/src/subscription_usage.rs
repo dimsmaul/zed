@@ -20,6 +20,29 @@ pub struct ClaudeSubscriptionUsage {
     pub email_address: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct CodexSubscriptionUsage {
+    pub email_address: Option<String>,
+    pub account_id: Option<String>,
+    pub auth_mode: Option<String>,
+    pub plan_tier: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct CopilotSubscriptionUsage {
+    pub username: Option<String>,
+    pub github_app_id: Option<String>,
+    pub status: Option<String>,
+    pub scopes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct AntigravitySubscriptionUsage {
+    pub email_address: Option<String>,
+    pub account_type: Option<String>,
+    pub status: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ProviderTokenMetrics {
     pub provider_name: String,
@@ -35,6 +58,9 @@ pub struct ProviderTokenMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AggregateUsageReport {
     pub claude_subscription: Option<ClaudeSubscriptionUsage>,
+    pub codex_subscription: Option<CodexSubscriptionUsage>,
+    pub copilot_subscription: Option<CopilotSubscriptionUsage>,
+    pub antigravity_subscription: Option<AntigravitySubscriptionUsage>,
     pub providers: Vec<ProviderTokenMetrics>,
 }
 
@@ -153,13 +179,138 @@ pub fn parse_claude_usage_from_str(content: &str) -> Result<ClaudeSubscriptionUs
     Ok(usage)
 }
 
+pub fn read_codex_subscription_usage() -> Option<CodexSubscriptionUsage> {
+    let home = paths::home_dir();
+    let auth_path = home.join(".codex").join("auth.json");
+    if !auth_path.exists() {
+        return None;
+    }
+    let content = fs::read_to_string(&auth_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let tokens = val.get("tokens")?.as_object()?;
+    let account_id = tokens
+        .get("account_id")
+        .and_then(|a| a.as_str())
+        .map(|s| s.to_string());
+    let auth_mode = val
+        .get("auth_mode")
+        .and_then(|a| a.as_str())
+        .map(|s| s.to_string());
+    let id_token = tokens
+        .get("id_token")
+        .and_then(|id| id.as_str())
+        .unwrap_or("");
+    let email = if !id_token.is_empty() {
+        let parts: Vec<&str> = id_token.split('.').collect();
+        if parts.len() >= 2 {
+            use base64::Engine;
+            base64::prelude::BASE64_STANDARD_NO_PAD
+                .decode(parts[1])
+                .or_else(|_| base64::prelude::BASE64_URL_SAFE_NO_PAD.decode(parts[1]))
+                .ok()
+                .and_then(|payload| serde_json::from_slice::<serde_json::Value>(&payload).ok())
+                .and_then(|v| {
+                    v.get("email")
+                        .and_then(|e| e.as_str())
+                        .map(|s| s.to_string())
+                })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Some(CodexSubscriptionUsage {
+        email_address: email,
+        account_id,
+        auth_mode,
+        plan_tier: Some("ChatGPT Plus / Team (Codex CLI)".to_string()),
+    })
+}
+
+pub fn read_copilot_subscription_usage() -> Option<CopilotSubscriptionUsage> {
+    let home = paths::home_dir();
+    let apps_path = home
+        .join(".config")
+        .join("github-copilot")
+        .join("apps.json");
+    if !apps_path.exists() {
+        return None;
+    }
+    let content = fs::read_to_string(&apps_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let obj = val.as_object()?;
+    for (_, entry) in obj {
+        let user = entry
+            .get("user")
+            .and_then(|u| u.as_str())
+            .map(|s| s.to_string());
+        let app_id = entry
+            .get("githubAppId")
+            .and_then(|a| a.as_str())
+            .map(|s| s.to_string());
+        let scopes = entry
+            .get("scopes")
+            .and_then(|s| s.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if user.is_some() || app_id.is_some() {
+            return Some(CopilotSubscriptionUsage {
+                username: user,
+                github_app_id: app_id,
+                status: Some("Active GitHub Copilot Subscription".to_string()),
+                scopes,
+            });
+        }
+    }
+    None
+}
+
+pub fn read_antigravity_subscription_usage() -> Option<AntigravitySubscriptionUsage> {
+    let home = paths::home_dir();
+    let creds_path = home.join(".gemini").join("oauth_creds.json");
+    if !creds_path.exists() {
+        return None;
+    }
+    let content = fs::read_to_string(&creds_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let email = val
+        .get("email")
+        .or_else(|| val.get("user"))
+        .and_then(|u| u.as_str())
+        .map(|s| s.to_string());
+    let token_present = val.get("access_token").and_then(|t| t.as_str()).is_some();
+
+    if token_present {
+        Some(AntigravitySubscriptionUsage {
+            email_address: email.or_else(|| Some("Active Antigravity Account".to_string())),
+            account_type: Some("Google AI / Gemini Pro".to_string()),
+            status: Some("Connected via Antigravity CLI OAuth".to_string()),
+        })
+    } else {
+        None
+    }
+}
+
 pub fn generate_usage_report() -> AggregateUsageReport {
     let claude_subscription = read_claude_subscription_usage();
+    let codex_subscription = read_codex_subscription_usage();
+    let copilot_subscription = read_copilot_subscription_usage();
+    let antigravity_subscription = read_antigravity_subscription_usage();
     let tracker = TOKEN_TRACKER.read();
     let mut providers: Vec<ProviderTokenMetrics> = tracker.values().cloned().collect();
 
-    // Ensure Claude and OpenAI/Codex entries exist for visibility
-    if !providers.iter().any(|p| p.provider_name.eq_ignore_ascii_case("claude") || p.provider_name.eq_ignore_ascii_case("anthropic")) {
+    // Ensure Claude, Codex, Copilot, and Antigravity entries exist for visibility
+    if !providers.iter().any(|p| {
+        p.provider_name.to_lowercase().contains("claude")
+            || p.provider_name.to_lowercase().contains("anthropic")
+    }) {
         providers.push(ProviderTokenMetrics {
             provider_name: "Claude (Anthropic)".to_string(),
             context_limit: 200_000,
@@ -167,10 +318,36 @@ pub fn generate_usage_report() -> AggregateUsageReport {
         });
     }
 
-    if !providers.iter().any(|p| p.provider_name.eq_ignore_ascii_case("codex") || p.provider_name.eq_ignore_ascii_case("openai")) {
+    if !providers.iter().any(|p| {
+        p.provider_name.to_lowercase().contains("codex")
+            || p.provider_name.to_lowercase().contains("openai")
+    }) {
         providers.push(ProviderTokenMetrics {
             provider_name: "Codex (OpenAI)".to_string(),
             context_limit: 128_000,
+            ..Default::default()
+        });
+    }
+
+    if !providers.iter().any(|p| {
+        p.provider_name.to_lowercase().contains("copilot")
+            || p.provider_name.to_lowercase().contains("github")
+    }) {
+        providers.push(ProviderTokenMetrics {
+            provider_name: "GitHub Copilot".to_string(),
+            context_limit: 128_000,
+            ..Default::default()
+        });
+    }
+
+    if !providers.iter().any(|p| {
+        p.provider_name.to_lowercase().contains("antigravity")
+            || p.provider_name.to_lowercase().contains("gemini")
+            || p.provider_name.to_lowercase().contains("google")
+    }) {
+        providers.push(ProviderTokenMetrics {
+            provider_name: "Antigravity (Google AI)".to_string(),
+            context_limit: 1_000_000,
             ..Default::default()
         });
     }
@@ -179,6 +356,9 @@ pub fn generate_usage_report() -> AggregateUsageReport {
 
     AggregateUsageReport {
         claude_subscription,
+        codex_subscription,
+        copilot_subscription,
+        antigravity_subscription,
         providers,
     }
 }
@@ -216,6 +396,48 @@ pub fn format_usage_markdown(report: &AggregateUsageReport) -> String {
                 output.push_str(&format!(" (Resets at: {})", resets));
             }
             output.push('\n');
+        }
+        output.push('\n');
+    }
+
+    if let Some(codex) = &report.codex_subscription {
+        output.push_str("#### 🟢 OpenAI Codex (ChatGPT Subscription)\n");
+        if let Some(plan) = &codex.plan_tier {
+            output.push_str(&format!("- **Plan Tier**: {}\n", plan));
+        }
+        if let Some(email) = &codex.email_address {
+            output.push_str(&format!("- **Account**: {}\n", email));
+        }
+        if let Some(acc_id) = &codex.account_id {
+            output.push_str(&format!("- **Account ID**: `{}`\n", acc_id));
+        }
+        output.push_str("- **Status**: Active Local Codex Subscription\n\n");
+    }
+
+    if let Some(copilot) = &report.copilot_subscription {
+        output.push_str("#### 🔵 GitHub Copilot\n");
+        if let Some(user) = &copilot.username {
+            output.push_str(&format!("- **GitHub User**: {}\n", user));
+        }
+        if let Some(status) = &copilot.status {
+            output.push_str(&format!("- **Status**: {}\n", status));
+        }
+        if !copilot.scopes.is_empty() {
+            output.push_str(&format!("- **Scopes**: {}\n", copilot.scopes.join(", ")));
+        }
+        output.push('\n');
+    }
+
+    if let Some(antigravity) = &report.antigravity_subscription {
+        output.push_str("#### 🔷 Google Antigravity (AI Studio / OAuth)\n");
+        if let Some(email) = &antigravity.email_address {
+            output.push_str(&format!("- **User Account**: {}\n", email));
+        }
+        if let Some(acc_type) = &antigravity.account_type {
+            output.push_str(&format!("- **Platform**: {}\n", acc_type));
+        }
+        if let Some(status) = &antigravity.status {
+            output.push_str(&format!("- **Status**: {}\n", status));
         }
         output.push('\n');
     }

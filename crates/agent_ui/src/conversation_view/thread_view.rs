@@ -14,8 +14,10 @@ use acp_thread::{
     SubmissionId, SubmissionResponse, SubmissionState, ToolCallLocation, decode_path_escapes,
 };
 use agent::{
-    read_claude_subscription_usage, SandboxStatusKey, SandboxStatusRefresh, SkillLoadingIssue,
-    SkillLoadingIssueKind, SkillLoadingIssuesUpdated, ThreadSandbox, VerifiedSandboxStatus,
+    read_antigravity_subscription_usage, read_claude_subscription_usage,
+    read_codex_subscription_usage, read_copilot_subscription_usage, SandboxStatusKey,
+    SandboxStatusRefresh, SkillLoadingIssue, SkillLoadingIssueKind, SkillLoadingIssuesUpdated,
+    ThreadSandbox, VerifiedSandboxStatus,
 };
 use agent_settings::UserAgentsMd;
 use agent_skills::MAX_SKILL_DESCRIPTION_LEN;
@@ -6924,7 +6926,7 @@ impl Render for TokenUsageTooltip {
                             .border_t_1()
                             .border_color(cx.theme().colors().border_variant)
                             .child(
-                                Label::new("Subscription Quota")
+                                Label::new("Claude Subscription Quota")
                                     .color(Color::Muted)
                                     .size(LabelSize::Small),
                             )
@@ -6942,6 +6944,99 @@ impl Render for TokenUsageTooltip {
                                         .gap_0p5()
                                         .child(Label::new("7-Day Quota:").color(Color::Muted).mr_0p5())
                                         .child(Label::new(format!("{}% used", seven_day.utilization_percent))),
+                                )
+                            }),
+                    )
+                })
+                .when_some(read_codex_subscription_usage(), |this, codex| {
+                    this.child(
+                        v_flex()
+                            .mt_1p5()
+                            .pt_1p5()
+                            .gap_0p5()
+                            .border_t_1()
+                            .border_color(cx.theme().colors().border_variant)
+                            .child(
+                                Label::new("OpenAI Codex Subscription")
+                                    .color(Color::Muted)
+                                    .size(LabelSize::Small),
+                            )
+                            .when_some(codex.email_address, |this, email| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("Account:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(email)),
+                                )
+                            })
+                            .when_some(codex.plan_tier, |this, plan| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("Status:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(plan)),
+                                )
+                            }),
+                    )
+                })
+                .when_some(read_copilot_subscription_usage(), |this, copilot| {
+                    this.child(
+                        v_flex()
+                            .mt_1p5()
+                            .pt_1p5()
+                            .gap_0p5()
+                            .border_t_1()
+                            .border_color(cx.theme().colors().border_variant)
+                            .child(
+                                Label::new("GitHub Copilot")
+                                    .color(Color::Muted)
+                                    .size(LabelSize::Small),
+                            )
+                            .when_some(copilot.username, |this, user| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("User:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(user)),
+                                )
+                            })
+                            .when_some(copilot.status, |this, status| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("Status:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(status)),
+                                )
+                            }),
+                    )
+                })
+                .when_some(read_antigravity_subscription_usage(), |this, antigravity| {
+                    this.child(
+                        v_flex()
+                            .mt_1p5()
+                            .pt_1p5()
+                            .gap_0p5()
+                            .border_t_1()
+                            .border_color(cx.theme().colors().border_variant)
+                            .child(
+                                Label::new("Google Antigravity")
+                                    .color(Color::Muted)
+                                    .size(LabelSize::Small),
+                            )
+                            .when_some(antigravity.email_address, |this, email| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("Account:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(email)),
+                                )
+                            })
+                            .when_some(antigravity.status, |this, status| {
+                                this.child(
+                                    h_flex()
+                                        .gap_0p5()
+                                        .child(Label::new("Auth:").color(Color::Muted).mr_0p5())
+                                        .child(Label::new(status)),
                                 )
                             }),
                     )

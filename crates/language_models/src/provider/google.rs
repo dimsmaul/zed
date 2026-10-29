@@ -215,13 +215,17 @@ impl GoogleLanguageModelProvider {
                 }
             })
             .detach();
-            State {
+            let mut state = State {
                 api_key_state: ApiKeyState::new(Self::api_url(cx), (*API_KEY_ENV_VAR).clone()),
                 credentials_provider,
                 http_client: http_client.clone(),
                 fetched_models: Vec::new(),
                 fetch_models_task: None,
+            };
+            if state.is_authenticated() {
+                state.restart_fetch_models_task(cx);
             }
+            state
         });
 
         Self {
@@ -244,6 +248,30 @@ impl GoogleLanguageModelProvider {
         for available in &GoogleLanguageModelProvider::settings(cx).available_models {
             let model = available_model_to_google_model(available);
             models.insert(model.id.clone(), model);
+        }
+
+        if models.is_empty() && self.is_authenticated(cx) {
+            let default_models = [
+                ("gemini-2.5-pro", "Gemini 2.5 Pro (Antigravity)", 2_000_000, 65_536),
+                ("gemini-2.5-flash", "Gemini 2.5 Flash (Antigravity)", 1_000_000, 65_536),
+                ("gemini-2.0-flash", "Gemini 2.0 Flash (Antigravity)", 1_000_000, 8_192),
+                ("gemini-1.5-pro", "Gemini 1.5 Pro", 2_000_000, 8_192),
+                ("gemini-1.5-flash", "Gemini 1.5 Flash", 1_000_000, 8_192),
+            ];
+            for (id, display_name, max_input, max_output) in default_models {
+                models.insert(
+                    id.to_string(),
+                    google_ai::Model {
+                        id: id.to_string(),
+                        display_name: display_name.to_string(),
+                        max_input_tokens: max_input,
+                        max_output_tokens: Some(max_output),
+                        mode: google_ai::GoogleModelMode::Default,
+                        supported_thinking_levels: Vec::new(),
+                        default_thinking_level: None,
+                    },
+                );
+            }
         }
 
         models
